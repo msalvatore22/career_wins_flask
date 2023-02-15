@@ -1,5 +1,5 @@
-from flask import Flask
-import db
+from flask import Flask, request
+import database.db as db
 import json
 from bson import json_util
 
@@ -13,12 +13,16 @@ def parse_json(data):
 def flask_mongodb_atlas():
     return "flask mongodb atlas!"
 
+@app.route('/api/v1/wins', methods = ['GET'])
+def get_wins():
+  return parse_json(db.wins.find())
 
-#test to insert data to the data base
-@app.route("/test")
-def test():
-    findOne = db.collection.find_one()
-    return parse_json(findOne)
+
+# @app.route('/api/v1/wins', methods = ['POST'])
+# def get_wins():
+#   raw_win = request.get_json()
+  
+#   return 
 
 if __name__ == '__main__':
     app.run(port=5000)
