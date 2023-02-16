@@ -12,4 +12,3 @@ mongo_database = os.getenv("MONGO_CLUSTER")
 cluster = MongoClient(f"mongodb+srv://{user}:{password}@{mongo_cluster}/{mongo_database}?retryWrites=true&w=majority")
 
 db = cluster["career_wins_flask"]
-wins = db["wins"]
