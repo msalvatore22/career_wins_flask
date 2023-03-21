@@ -38,13 +38,23 @@ jwt = JWTManager(app)
 def send(data, status_code):
   return make_response(dumps(data), status_code)
 
+def user_lookup():
+  current_user = get_jwt_identity()
+  user_lookup = mongo.db["users"].find_one({'email': current_user})
+  return user_lookup
+
 @app.route("/api/v1/users", methods=["POST"])
 def register():
-  new_user = request.get_json()
-  new_user["password"] = hashlib.sha256(new_user["password"].encode("utf-8")).hexdigest()
-  doc = mongo.db["users"].find_one({"email": new_user["email"]})
+  form_data = request.get_json()
+  if "id" in form_data:
+    form_data.pop("id")
+
+  form_data["password"] = hashlib.sha256(form_data["password"].encode("utf-8")).hexdigest()  
+  new_user = User(**form_data)
+  doc = mongo.db["users"].find_one({"email": new_user.email})
+
   if not doc:
-    mongo.db["users"].insert_one(new_user)
+    mongo.db["users"].insert_one(new_user.__dict__)
     return jsonify({'msg': 'User created successfully'}), 201
   else:
     return jsonify({'msg': 'User already exists with that email'}), 409
@@ -64,21 +74,21 @@ def login():
 @app.route("/api/v1/user", methods=["GET"])
 @jwt_required()
 def get_user():
-  current_user = get_jwt_identity()
-  user_lookup = mongo.db["users"].find_one({'email': current_user})
-
-  if user_lookup:
-    del user_lookup['_id'], user_lookup['password']
-    return jsonify({'profile' : user_lookup }), 200
+  user = user_lookup()
+  if user:
+    del user['_id'], user['password']
+    return jsonify({'profile' : user }), 200
   else:
     return jsonify({'msg': 'Profile not found'}), 404
 
 @app.route('/api/v1/wins', methods = ['POST'])
+@jwt_required()
 def post_win():
   """
-    Create a win using dataclass model
+    Insert a new win into user collection
   """
-  collection = mongo.db["wins"]
+  user = user_lookup()
+  
   form_data = request.json
   if "id" in form_data:
     form_data.pop("id")
@@ -86,27 +96,12 @@ def post_win():
   win = Win(**form_data)
   
   try:
-    insert_id = str(collection.insert_one(win.__dict__).inserted_id)
-    output = {'message': 'new document created', "_id": insert_id}
+    mongo.db["users"].update_one({'email': user["email"]}, {'$push': { "wins": win.__dict__ }})
+    output = {'message': "inserted new win"}
     return send(output, codes.HTTP_SUCCESS_CREATED)
   except Exception as e:
     output = {'error': str(e)}
     return send(output, codes.HTTP_BAD_REQUEST)
-
-# @app.route('/api/v1/<collection_name>', methods = ['POST'])
-# def post_document(collection_name):
-#   """
-#     Post one document to a collection
-#   """
-#   collection = getattr(mongo.db, collection_name)
-#   form_data = request.json
-#   try:
-#     insert_id = str(collection.insert_one(form_data).inserted_id)
-#     output = {'message': 'new document created', "_id": insert_id}
-#     return send(output, codes.HTTP_SUCCESS_CREATED)
-#   except Exception as e:
-#     output = {'error': str(e)}
-#     return send(output, codes.HTTP_BAD_REQUEST)
 
 @app.route('/api/v1/<collection_name>', methods=['GET'])
 def get_all_documents(collection_name):
