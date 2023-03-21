@@ -3,3 +3,4 @@ pymongo[srv]
 Flask-PyMongo
 python-dotenv
 flask-cors
+flask-jwt-extended
