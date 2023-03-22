@@ -1,7 +1,7 @@
 
 import os
-import hashlib
 import datetime
+import bcrypt
 from flask import Flask, request, make_response, Response, jsonify
 from flask_cors import CORS
 import http_status_codes as codes
@@ -49,7 +49,7 @@ def register():
   if "id" in form_data:
     form_data.pop("id")
 
-  form_data["password"] = hashlib.sha256(form_data["password"].encode("utf-8")).hexdigest()  
+  form_data["password"] = bcrypt.hashpw(form_data["password"].encode('utf-8'), bcrypt.gensalt(rounds=15)) 
   new_user = User(**form_data)
   doc = mongo.db["users"].find_one({"email": new_user.email})
 
@@ -64,9 +64,8 @@ def login():
   login_details = request.get_json()
   user_lookup = mongo.db["users"].find_one({'email': login_details["email"]})
 
-  if user_lookup:
-    encrypted_password = hashlib.sha256(login_details["password"].encode("utf-8")).hexdigest()
-    if encrypted_password == user_lookup["password"]:
+  if user_lookup: 
+    if bcrypt.checkpw(login_details["password"].encode('utf-8'), user_lookup["password"]):
       access_token = create_access_token(identity=user_lookup["email"])
       return jsonify(access_token=access_token), 200
   return jsonify({'msg': 'The email or password is incorrect'}), 401

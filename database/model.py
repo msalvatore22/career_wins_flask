@@ -1,7 +1,6 @@
 from dataclasses import field, dataclass
 from datetime import datetime
 from typing import Optional
-from bson.objectid import ObjectId
 from itertools import count
 
 
