@@ -14,11 +14,13 @@ from database.model import Win, User
 from flask_pymongo import ObjectId
 from bson.json_util import dumps
 
-from flask_jwt_extended import create_access_token
-from flask_jwt_extended import get_jwt_identity
-from flask_jwt_extended import jwt_required
-from flask_jwt_extended import current_user
-from flask_jwt_extended import JWTManager
+from flask_jwt_extended import (
+  create_access_token, 
+  get_jwt_identity,
+  jwt_required,
+  current_user,
+  JWTManager
+  )
 
 class JSONResponse(Response):
   default_mimetype = 'application/json'
@@ -27,7 +29,6 @@ class ApiFlask(Flask):
   response_class = JSONResponse
 
 app = ApiFlask(__name__)
-
 CORS(app)
 
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
@@ -43,6 +44,7 @@ def user_lookup():
   user_lookup = mongo.db["users"].find_one({'email': current_user})
   return user_lookup
 
+# Register a new user
 @app.route("/api/v1/users", methods=["POST"])
 def register():
   form_data = request.get_json()
@@ -59,6 +61,7 @@ def register():
   else:
     return jsonify({'msg': 'User already exists with that email'}), 409
 
+# Login a user
 @app.route("/api/v1/login", methods=['POST'])
 def login():
   login_details = request.get_json()
@@ -70,16 +73,18 @@ def login():
       return jsonify(access_token=access_token), 200
   return jsonify({'msg': 'The email or password is incorrect'}), 401
 
+# Get user
 @app.route("/api/v1/user", methods=["GET"])
 @jwt_required()
 def get_user():
   user = user_lookup()
   if user:
     del user['_id'], user['password']
-    return jsonify({'profile' : user }), 200
+    return jsonify({'user' : user }), 200
   else:
     return jsonify({'msg': 'Profile not found'}), 404
 
+# Add win to user document
 @app.route('/api/v1/wins', methods = ['POST'])
 @jwt_required()
 def post_win():
@@ -102,65 +107,66 @@ def post_win():
     output = {'error': str(e)}
     return send(output, codes.HTTP_BAD_REQUEST)
 
-@app.route('/api/v1/<collection_name>', methods=['GET'])
-def get_all_documents(collection_name):
+# Delete win from user document
+@app.route('/api/v1/wins/<id>', methods = ['DELETE'])
+@jwt_required()
+def delete_win(id):
   """
-      Documents in a collection.
+    Delete win from user collection
   """
-  collection = getattr(mongo.db, collection_name)
-  output = []
-  for doc in collection.find():
-      output.append(doc)
-  return send(output, codes.HTTP_SUCCESS_GET_OR_UPDATE)
+  user = user_lookup()
 
-@app.route('/api/v1/<collection_name>/<id>', methods=['GET'])
-def get_one_document(collection_name, id):
+  try:
+    mongo.db["users"].update_one({'email': user["email"]}, {'$pull': { "wins": {"id": id} }})
+    output = {'message': f"Deleted win id {id}"}
+    print(output)
+    return send(output, codes.HTTP_SUCCESS_DELETED)
+  except Exception as e:
+    output = {'error': str(e)}
+    return send(output, codes.HTTP_BAD_REQUEST)
+
+# Get a win from user document by win id
+@app.route('/api/v1/wins/<id>', methods=['GET'])
+@jwt_required()
+def get_one_document(id):
   """
-    Get one item from a collection.
+    Get one win from user collection
   """
-  collection = getattr(mongo.db, collection_name)
-  doc = collection.find_one({'_id': ObjectId(id)})
-  if doc:
-    return send(doc, codes.HTTP_SUCCESS_GET_OR_UPDATE)
+  user = user_lookup()
+
+  user_wins = user["wins"]
+  win = next(win for win in user_wins if win["id"] == id)
+  if win:
+    return send(win, codes.HTTP_SUCCESS_GET_OR_UPDATE)
   else:
     return send({'error' : 'document not found'}, codes.HTTP_NOT_FOUND)
 
-@app.route('/api/v1/<collection_name>/<id>', methods=['PUT'])
-def update_document(collection_name, id):
+# Update a win from user document by win id
+@app.route('/api/v1/wins/<id>', methods=['PUT'])
+@jwt_required()
+def update_document(id):
   """
     Update one item in collection.
   """
-  collection = getattr(mongo.db, collection_name)
-  doc = collection.find_one({'_id': ObjectId(id)})
+  user = user_lookup() 
   form_data = request.get_json()
-  if doc:
+  if user:
     try:
-      collection.update_one({"_id": ObjectId(id)}, {"$set": form_data})
-      output = {'message': 'document updated', "_id": id}
+      mongo.db["users"].find_one_and_update({'email': user["email"], "wins.id": id}, {'$set': {
+        "wins.$.title": form_data["title"],
+        "wins.$.description": form_data["description"],
+        "wins.$.impact": form_data["impact"],
+        "wins.$.winDate": form_data["winDate"],
+        "wins.$.favorite": form_data["favorite"],
+        "wins.$.updatedAt": datetime.datetime.utcnow()
+      }})
+      output = {'message': 'win updated', "id": id}
       return send(output, codes.HTTP_SUCCESS_GET_OR_UPDATE)
     except Exception as e:
       output = {'error' : str(e)}
       return send(output, codes.HTTP_BAD_REQUEST)
   else:
-    output = {'error' : 'document not found'}
-    return send(output, codes.HTTP_NOT_FOUND)
-
-@app.route('/api/v1/<collection_name>/<id>', methods=['DELETE'])
-def delete_item(collection_name, id):
-  """
-    Delete one item from collection.
-  """
-  collection = getattr(mongo.db, collection_name)
-  doc = collection.find_one({'_id': ObjectId(id)})
-  if doc:
-    try:
-      collection.delete_one({"_id": doc["_id"]})
-      return send("", codes.HTTP_SUCCESS_DELETED)
-    except Exception as e:
-      output = {'error' : str(e)}
-      return send(output, codes.HTTP_BAD_REQUEST)
-  else:
-    output = {'error' : 'document not found'}
+    output = {'error' : 'user not found'}
     return send(output, codes.HTTP_NOT_FOUND)
 
 @app.route('/')
