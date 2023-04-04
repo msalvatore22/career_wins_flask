@@ -18,6 +18,7 @@ from flask_jwt_extended import (
   create_access_token, 
   get_jwt_identity,
   jwt_required,
+  unset_jwt_cookies,
   current_user,
   JWTManager
   )
@@ -73,6 +74,12 @@ def login():
       return jsonify(access_token=access_token), 200
   return jsonify({'msg': 'The email or password is incorrect'}), 401
 
+@app.route("/logout", methods=["POST"])
+def logout():
+    response = jsonify({"msg": "logout successful"})
+    unset_jwt_cookies(response)
+    return response
+
 # Get user
 @app.route("/api/v1/user", methods=["GET"])
 @jwt_required()
@@ -83,6 +90,22 @@ def get_user():
     return jsonify({'user' : user }), 200
   else:
     return jsonify({'msg': 'Profile not found'}), 404
+
+# Get a win from user document by win id
+@app.route('/api/v1/wins/<id>', methods=['GET'])
+@jwt_required()
+def get_one_document(id):
+  """
+    Get one win from user collection
+  """
+  user = user_lookup()
+
+  user_wins = user["wins"]
+  win = next(win for win in user_wins if win["id"] == id)
+  if win:
+    return send(win, codes.HTTP_SUCCESS_GET_OR_UPDATE)
+  else:
+    return send({'error' : 'document not found'}, codes.HTTP_NOT_FOUND)
 
 # Add win to user document
 @app.route('/api/v1/wins', methods = ['POST'])
@@ -101,11 +124,42 @@ def post_win():
   
   try:
     mongo.db["users"].update_one({'email': user["email"]}, {'$push': { "wins": win.__dict__ }})
-    output = {'message': "inserted new win"}
+    output = {'message': "inserted new win", "id": win.id}
     return send(output, codes.HTTP_SUCCESS_CREATED)
   except Exception as e:
     output = {'error': str(e)}
     return send(output, codes.HTTP_BAD_REQUEST)
+
+# Update a win from user document by win id
+@app.route('/api/v1/wins/<id>', methods=['PUT'])
+@jwt_required()
+def update_document(id):
+  """
+    Update one item in collection.
+  """
+  user = user_lookup() 
+  form_data = request.get_json()
+  if user:
+    try:
+      mongo.db["users"].find_one_and_update(
+        {'email': user["email"], "wins.id": id}, 
+        {'$set': {
+          "wins.$.title": form_data["title"],
+          "wins.$.description": form_data["description"],
+          "wins.$.impact": form_data["impact"],
+          "wins.$.winDate": form_data["winDate"],
+          "wins.$.favorite": form_data["favorite"],
+          "wins.$.updatedAt": datetime.datetime.utcnow()
+          }
+        })
+      output = {'message': 'win updated', "id": id}
+      return send(output, codes.HTTP_SUCCESS_GET_OR_UPDATE)
+    except Exception as e:
+      output = {'error' : str(e)}
+      return send(output, codes.HTTP_BAD_REQUEST)
+  else:
+    output = {'error' : 'user not found'}
+    return send(output, codes.HTTP_NOT_FOUND)
 
 # Delete win from user document
 @app.route('/api/v1/wins/<id>', methods = ['DELETE'])
@@ -124,50 +178,6 @@ def delete_win(id):
   except Exception as e:
     output = {'error': str(e)}
     return send(output, codes.HTTP_BAD_REQUEST)
-
-# Get a win from user document by win id
-@app.route('/api/v1/wins/<id>', methods=['GET'])
-@jwt_required()
-def get_one_document(id):
-  """
-    Get one win from user collection
-  """
-  user = user_lookup()
-
-  user_wins = user["wins"]
-  win = next(win for win in user_wins if win["id"] == id)
-  if win:
-    return send(win, codes.HTTP_SUCCESS_GET_OR_UPDATE)
-  else:
-    return send({'error' : 'document not found'}, codes.HTTP_NOT_FOUND)
-
-# Update a win from user document by win id
-@app.route('/api/v1/wins/<id>', methods=['PUT'])
-@jwt_required()
-def update_document(id):
-  """
-    Update one item in collection.
-  """
-  user = user_lookup() 
-  form_data = request.get_json()
-  if user:
-    try:
-      mongo.db["users"].find_one_and_update({'email': user["email"], "wins.id": id}, {'$set': {
-        "wins.$.title": form_data["title"],
-        "wins.$.description": form_data["description"],
-        "wins.$.impact": form_data["impact"],
-        "wins.$.winDate": form_data["winDate"],
-        "wins.$.favorite": form_data["favorite"],
-        "wins.$.updatedAt": datetime.datetime.utcnow()
-      }})
-      output = {'message': 'win updated', "id": id}
-      return send(output, codes.HTTP_SUCCESS_GET_OR_UPDATE)
-    except Exception as e:
-      output = {'error' : str(e)}
-      return send(output, codes.HTTP_BAD_REQUEST)
-  else:
-    output = {'error' : 'user not found'}
-    return send(output, codes.HTTP_NOT_FOUND)
 
 @app.route('/')
 def flask_mongodb_atlas():

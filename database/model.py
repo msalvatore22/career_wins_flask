@@ -19,7 +19,8 @@ class Win:
 
 @dataclass(frozen=True)
 class User:
-  full_name: str
+  firstName: str
+  lastName: str
   email: str
   password: bytes
   wins: list[dict] = field(default_factory=list)
