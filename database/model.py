@@ -15,6 +15,7 @@ class Win:
   winDate: Optional[str]
   favorite: bool = False
   created_at: datetime = field(default_factory=datetime.utcnow)
+  tags: list[str] = field(default_factory=list)
   id: str = field(default_factory=get_new_uuid)
 
 @dataclass(frozen=True)
@@ -23,4 +24,6 @@ class User:
   lastName: str
   email: str
   password: bytes
+  industry: str
+  jobTitle: str
   wins: list[dict] = field(default_factory=list)

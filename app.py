@@ -74,7 +74,7 @@ def login():
       return jsonify(access_token=access_token), 200
   return jsonify({'msg': 'The email or password is incorrect'}), 401
 
-@app.route("/logout", methods=["POST"])
+@app.route("/api/v1/logout", methods=["POST"])
 def logout():
     response = jsonify({"msg": "logout successful"})
     unset_jwt_cookies(response)
